@@ -41,6 +41,9 @@ enum class target {
 #if NDZIP_CUDA_SUPPORT
     cuda,
 #endif
+#if NDZIP_HIPIFIED_SUPPORT
+    hipified,
+#endif
 };
 
 template<typename T>
@@ -56,6 +59,11 @@ template<typename T>
 std::unique_ptr<offloader<T>> make_cuda_offloader(dim_type dimensions);
 #endif
 
+#if NDZIP_HIPIFIED_SUPPORT
+template<typename T>
+std::unique_ptr<offloader<T>> make_hipified_offloader(dim_type dimensions);
+#endif
+
 template<typename T>
 std::unique_ptr<offloader<T>> make_offloader(target target, dim_type dimensions, bool enable_profiling = false) {
     switch (target) {
@@ -65,6 +73,9 @@ std::unique_ptr<offloader<T>> make_offloader(target target, dim_type dimensions,
 #endif
 #if NDZIP_CUDA_SUPPORT
         case target::cuda: return make_cuda_offloader<T>(dimensions);
+#endif
+#if NDZIP_HIPIFIED_SUPPORT
+        case target::cuda: return make_hipified_offloader<T>(dimensions);
 #endif
         default: throw std::runtime_error("ndzip::make_offloader: invalid target");
     }

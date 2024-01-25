@@ -1,12 +1,13 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.21)
 
 project(ndzip)
 
 option(NDZIP_BUILD_TEST "Build unit tests" OFF)
 option(NDZIP_BUILD_BENCHMARK "Build benchmarks against other algorithms" OFF)
 option(NDZIP_WITH_MT "Enable parallel CPU implementation through OpenMP if available " ON)
-option(NDZIP_WITH_HIPSYCL "Enable GPU implementation through hipSYCL if available" ON)
+option(NDZIP_WITH_HIPSYCL "Enable GPU implementation through hipSYCL if available" OFF)
 option(NDZIP_WITH_CUDA "Enable GPU implementation through CUDA if available" ON)
+option(NDZIP_WITH_HIPIFIED "Enable GPU implementation through Hipification from CUDA if available" ON)
 option(NDZIP_WITH_3RDPARTY_BENCHMARKS "Build third-party libraries for benchmarking" ON)
 
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
@@ -29,6 +30,12 @@ if (NDZIP_WITH_CUDA)
     if (CUDAToolkit_FOUND AND CMAKE_CUDA_COMPILER)
         enable_language(CUDA)
         set(NDZIP_USE_CUDA TRUE)
+    endif ()
+endif ()
+if (NDZIP_WITH_HIPIFIED)
+    find_package(hip REQUIRED)
+    if (CMAKE_HIP_COMPILER)
+        set(NDZIP_USE_HIPIFIED TRUE)
     endif ()
 endif ()
 
@@ -67,6 +74,10 @@ if (NDZIP_BUILD_BENCHMARK AND NDZIP_WITH_3RDPARTY_BENCHMARKS)
         endif ()
     endif ()
 
+    if (NDZIP_USE_HIPIFIED)
+        ## TODO
+    endif()
+
     if (EXISTS "${CMAKE_SOURCE_DIR}/contrib/zfp/CMakeLists.txt")
         set(ZFP_FOUND TRUE)
     else ()
@@ -102,6 +113,11 @@ if (NDZIP_USE_CUDA)
     endif ()
 endif ()
 
+if (NDZIP_USE_HIPIFIED)
+    ## less strict check
+    set(NDZIP_HIPIFIED_FLAGS ${NDZIP_COMPILE_FLAGS})
+endif()
+
 set(NDZIP_PROFILE_CONFIGURATIONS
     VARIABLE DATA_TYPE VALUES float double
     VARIABLE DIMENSIONS VALUES 1 2 3
@@ -124,6 +140,7 @@ target_include_directories(ndzip PUBLIC include)
 target_compile_definitions(ndzip PUBLIC
     -DNDZIP_HIPSYCL_SUPPORT=$<BOOL:${NDZIP_USE_HIPSYCL}>
     -DNDZIP_CUDA_SUPPORT=$<BOOL:${NDZIP_USE_CUDA}>
+    -DNDZIP_HIPIFIED_SUPPORT=$<BOOL:${NDZIP_USE_HIPIFIED}>
     -DNDZIP_OPENMP_SUPPORT=$<BOOL:${OpenMP_FOUND}>
 )
 target_compile_options(ndzip PRIVATE ${NDZIP_CXX_FLAGS})
@@ -168,6 +185,26 @@ if (NDZIP_USE_CUDA)
     target_link_libraries(ndzip-cuda PUBLIC ndzip)
 endif ()
 
+## TODO
+if (NDZIP_USE_HIPIFIED)
+    add_library(ndzip-hipified SHARED
+        include/ndzip/hipified.hh
+        src/ndzip/hipified_bits.hip.hh
+        src/ndzip/hipified_codec.inl
+        src/ndzip/hipified_factory.hip
+        )
+    target_split_configured_sources(ndzip-hipified PRIVATE
+        GENERATE hipified_encoder.hip FROM src/ndzip/hipified_codec.inl
+        ${NDZIP_PROFILE_CONFIGURATIONS}
+    )
+    target_include_directories(ndzip-hipified PUBLIC include)
+    # target_compile_options and the COMPILE_OPTIONS property will de-duplicate flags which breaks
+    # -Xcudafe <arg>. Use (deprecated) COMPILE_FLAGS instead.
+    list(JOIN NDZIP_CUDA_FLAGS " " NDZIP_CUDA_FLAGS_STRING)
+    set_target_properties(ndzip-hipified PROPERTIES COMPILE_FLAGS "${NDZIP_CUDA_FLAGS_STRING}")
+    target_link_libraries(ndzip-hipified PUBLIC ndzip)
+endif ()
+
 add_library(io STATIC
     src/io/io.cc
     src/io/io.hh
@@ -187,8 +224,12 @@ endif ()
 if (NDZIP_USE_CUDA)
     target_link_libraries(compress PRIVATE ndzip-cuda)
 endif ()
+if (NDZIP_USE_HIPIFIED)
+    target_link_libraries(compress PRIVATE ndzip-hipified)
+endif ()
 
 
+## [hipidac] For hipification, leave it later
 if (NDZIP_BUILD_TEST AND Catch2_FOUND)
     add_executable(encoder_test
         src/test/test_utils.hh

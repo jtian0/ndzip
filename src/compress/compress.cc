@@ -151,6 +151,9 @@ int main(int argc, char **argv) {
 #if NDZIP_CUDA_SUPPORT
                                              "|cuda"
 #endif
+#if NDZIP_HIPIFIED_SUPPORT
+                                             "|hipified"
+#endif
                                              " (default cpu)")
         ("threads,T", opts::value(&num_threads_or_0), "number of CPU threads")
         ("input,i", opts::value(&input), "input file (default '-' is stdin)")
@@ -183,6 +186,10 @@ int main(int argc, char **argv) {
 #if NDZIP_CUDA_SUPPORT
         } else if (target_str == "cuda") {
             target = ndzip::target::cuda;
+#endif
+#if NDZIP_HIPIFIED_SUPPORT
+        } else if (target_str == "hipified") {
+            target = ndzip::target::hipified;
 #endif
         } else {
             throw opts::error{"Unimplemented target " + target_str};

@@ -7,7 +7,7 @@
 #include <type_traits>
 
 
-#if defined(__CUDA__) || defined(__NVCC__)
+#if defined(__CUDA__) || defined(__NVCC__) || defined(__HIPCC__)
 #define NDZIP_UNIVERSAL __host__ __device__
 #else
 #define NDZIP_UNIVERSAL
